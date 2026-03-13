@@ -1,0 +1,17 @@
+# 编译文件
+*.o
+*.out
+*.a
+*.so
+
+# 日志
+*.log
+
+# build目录
+build/
+
+# vscode
+.vscode/
+
+# Linux临时文件
+*.swp
