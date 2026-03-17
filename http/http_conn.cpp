@@ -3,6 +3,9 @@
 //#include <mysql/mysql.h>
 #include <fstream>
 
+
+#include <sqlite3.h>
+
 //定义http响应的一些状态信息
 const char *ok_200_title = "OK";
 const char *error_400_title = "Bad Request";
@@ -17,7 +20,7 @@ const char *error_500_form = "There was an unusual problem serving the request f
 locker m_lock;
 map<string, string> users;
 
-void http_conn::initmysql_result(connection_pool *connPool)
+void http_conn::initmysql_result()
 {
     sqlite3 *db;
     char *errmsg = nullptr;
@@ -66,6 +69,39 @@ void http_conn::initmysql_result(connection_pool *connPool)
     sqlite3_finalize(stmt);
     sqlite3_close(db);
 }
+
+
+sqlite3 *db;
+if (sqlite3_open("user.db", &db))
+{
+    printf("Can't open database\n");
+    return;
+}
+
+char *errmsg = NULL;
+char **result = NULL;
+int row, col;
+
+// 查询用户表
+std::string sql = "SELECT username, password FROM user;";
+
+if (sqlite3_get_table(db, sql.c_str(), &result, &row, &col, &errmsg) == SQLITE_OK)
+{
+    for (int i = 1; i <= row; i++)
+    {
+        std::string user = result[i * col];
+        std::string passwd = result[i * col + 1];
+
+        users[user] = passwd;
+    }
+}
+else
+{
+    printf("SQLite SELECT error: %s\n", errmsg);
+}
+
+sqlite3_free_table(result);
+sqlite3_close(db);
 
 /*
 void http_conn::initmysql_result(connection_pool *connPool)
