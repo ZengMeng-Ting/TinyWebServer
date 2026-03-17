@@ -82,7 +82,7 @@ public:
     {
         return &m_address;
     }
-    void http_conn::initmysql_result()
+    void http_conn::initmysql_result();
     // void initmysql_result(connection_pool *connPool);
     int timer_flag;
     int improv;
