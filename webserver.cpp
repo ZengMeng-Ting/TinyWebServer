@@ -86,18 +86,15 @@ void WebServer::log_write()
 
 void WebServer::sql_pool()
 {
-    //初始化数据库连接池
-    m_connPool = connection_pool::GetInstance();
-    m_connPool->init("localhost", m_user, m_passWord, m_databaseName, 3306, m_sql_num, m_close_log);
-
-    //初始化数据库读取表
-    users->initmysql_result(m_connPool);
+    // SQLite 不需要数据库连接池, 直接初始化本地数据库数据缓存
+    users->initmysql_result();
 }
 
 void WebServer::thread_pool()
 {
-    //线程池
-    m_pool = new threadpool<http_conn>(m_actormodel, m_connPool, m_thread_num);
+    // 线程池: actor_model + 线程数 + 最大请求数
+    // 这里使用 m_sql_num 作为最大请求队列长度（原用于连接池大小）
+    m_pool = new threadpool<http_conn>(m_actormodel, m_thread_num, m_sql_num);
 }
 
 void WebServer::eventListen()
@@ -106,7 +103,7 @@ void WebServer::eventListen()
     m_listenfd = socket(PF_INET, SOCK_STREAM, 0);
     assert(m_listenfd >= 0);
 
-    //优雅关闭连接
+    //关闭连接
     if (0 == m_OPT_LINGER)
     {
         struct linger tmp = {0, 1};

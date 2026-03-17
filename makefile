@@ -24,19 +24,11 @@ else
     CXXFLAGS += -O2                 # 优化编译，提高运行效率
 endif
 
-# ================== 是否启用 MySQL ==================
-# 嵌入式环境（i.MX6ULL）建议关闭（默认）
-# 如果在 PC 上测试数据库功能：
-# make USE_MYSQL=1
+# ================== 是否启用 SQLite ==================
+# 默认启用 SQLite，编译时会链接 sqlite3 库。
+# 如果你在目标平台上不需要数据库功能，可将下面的 LIBS 修改为仅 -lpthread。
 
-USE_MYSQL ?= 0
-
-ifeq ($(USE_MYSQL), 1)
-    LIBS = -lpthread -lsqlite3              # 链接 MySQL 客户端库
-    SRC += ./CGImysql/sql_connection_pool.cpp   # 加入数据库连接池源码
-else
-    LIBS = -lpthread                           # 仅保留线程库
-endif
+LIBS = -lpthread -lsqlite3
 
 # ================== 源文件列表 ==================
 # WebServer 核心模块

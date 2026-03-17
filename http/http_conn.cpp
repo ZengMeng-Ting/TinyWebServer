@@ -3,9 +3,6 @@
 //#include <mysql/mysql.h>
 #include <fstream>
 
-
-#include <sqlite3.h>
-
 //定义http响应的一些状态信息
 const char *ok_200_title = "OK";
 const char *error_400_title = "Bad Request";
@@ -69,71 +66,6 @@ void http_conn::initmysql_result()
     sqlite3_finalize(stmt);
     sqlite3_close(db);
 }
-
-
-sqlite3 *db;
-if (sqlite3_open("user.db", &db))
-{
-    printf("Can't open database\n");
-    return;
-}
-
-char *errmsg = NULL;
-char **result = NULL;
-int row, col;
-
-// 查询用户表
-std::string sql = "SELECT username, password FROM user;";
-
-if (sqlite3_get_table(db, sql.c_str(), &result, &row, &col, &errmsg) == SQLITE_OK)
-{
-    for (int i = 1; i <= row; i++)
-    {
-        std::string user = result[i * col];
-        std::string passwd = result[i * col + 1];
-
-        users[user] = passwd;
-    }
-}
-else
-{
-    printf("SQLite SELECT error: %s\n", errmsg);
-}
-
-sqlite3_free_table(result);
-sqlite3_close(db);
-
-/*
-void http_conn::initmysql_result(connection_pool *connPool)
-{
-    //先从连接池中取一个连接
-    //MYSQL *mysql = NULL;
-    connectionRAII mysqlcon(&mysql, connPool);
-
-    //在user表中检索username，passwd数据，浏览器端输入
-    if (mysql_query(mysql, "SELECT username,passwd FROM user"))
-    {
-        LOG_ERROR("SELECT error:%s\n", mysql_error(mysql));
-    }
-
-    //从表中检索完整的结果集
-    MYSQL_RES *result = mysql_store_result(mysql);
-
-    //返回结果集中的列数
-    int num_fields = mysql_num_fields(result);
-
-    //返回所有字段结构的数组
-    MYSQL_FIELD *fields = mysql_fetch_fields(result);
-
-    //从结果集中获取下一行，将对应的用户名和密码，存入map中
-    while (MYSQL_ROW row = mysql_fetch_row(result))
-    {
-        string temp1(row[0]);
-        string temp2(row[1]);
-        users[temp1] = temp2;
-    }
-}
-*/
 
 //对文件描述符设置非阻塞
 int setnonblocking(int fd)
@@ -223,7 +155,6 @@ void http_conn::init(int sockfd, const sockaddr_in &addr, char *root, int TRIGMo
 //check_state默认为分析请求行状态
 void http_conn::init()
 {
-    mysql = NULL;
     bytes_to_send = 0;
     bytes_have_send = 0;
     m_check_state = CHECK_STATE_REQUESTLINE;
@@ -508,68 +439,45 @@ http_conn::HTTP_CODE http_conn::do_request()
 
         if (*(p + 1) == '3')
         {
-            //如果是注册，先检测数据库中是否有重名的
-            //没有重名的，进行增加数据
-            char *sql_insert = (char *)malloc(sizeof(char) * 200);
-            strcpy(sql_insert, "INSERT INTO user(username, passwd) VALUES(");
-            strcat(sql_insert, "'");
-            strcat(sql_insert, name);
-            strcat(sql_insert, "', '");
-            strcat(sql_insert, password);
-            strcat(sql_insert, "')");
-
+            // 注册：先检测内存缓存中是否有重名用户
             if (users.find(name) == users.end())
             {
                 m_lock.lock();
-                //int res = mysql_query(mysql, sql_insert);
 
-                sqlite3 *db;
+                sqlite3 *db = nullptr;
                 char *errmsg = nullptr;
+                int res = SQLITE_ERROR;
 
-                sqlite3_open("user.db", &db);
-
-                string sql_insert = "INSERT INTO user(username, passwd) VALUES('";
-                sql_insert += name;
-                sql_insert += "', '";
-                sql_insert += password;
-                sql_insert += "')";
-
-                if (users.find(name) == users.end())
+                if (sqlite3_open("user.db", &db) == SQLITE_OK)
                 {
-                    m_lock.lock();
+                    string sql_insert = "INSERT INTO user(username, passwd) VALUES('";
+                    sql_insert += name;
+                    sql_insert += "', '";
+                    sql_insert += password;
+                    sql_insert += "')";
 
-                    int res = sqlite3_exec(db, sql_insert.c_str(), 0, 0, &errmsg);
-
-                    if (res == SQLITE_OK)
-                    {
-                        users.insert(pair<string, string>(name, password));
-                        strcpy(m_url, "/log.html");
-                    }
-                    else
-                    {
-                        strcpy(m_url, "/registerError.html");
-                        sqlite3_free(errmsg);
-                    }
-
-                    m_lock.unlock();
-                }
-                else
-                {
-                    strcpy(m_url, "/registerError.html");
+                    res = sqlite3_exec(db, sql_insert.c_str(), 0, 0, &errmsg);
+                    sqlite3_close(db);
                 }
 
-                sqlite3_close(db);
-                
-                users.insert(pair<string, string>(name, password));
-                m_lock.unlock();
-
-                if (!res)
+                if (res == SQLITE_OK)
+                {
+                    users[name] = password;
                     strcpy(m_url, "/log.html");
+                }
                 else
+                {
                     strcpy(m_url, "/registerError.html");
+                    if (errmsg)
+                        sqlite3_free(errmsg);
+                }
+
+                m_lock.unlock();
             }
             else
+            {
                 strcpy(m_url, "/registerError.html");
+            }
         }
         //如果是登录，直接判断
         //若浏览器端输入的用户名和密码在表中可以查找到，返回1，否则返回0
