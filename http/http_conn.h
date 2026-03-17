@@ -22,7 +22,7 @@
 #include <map>
 
 #include "../lock/locker.h"
-#include "../CGImysql/sql_connection_pool.h"
+//#include "../CGImysql/sql_connection_pool.h"
 #include "../timer/lst_timer.h"
 #include "../log/log.h"
 
@@ -82,7 +82,8 @@ public:
     {
         return &m_address;
     }
-    void initmysql_result(connection_pool *connPool);
+    void http_conn::initmysql_result()
+    // void initmysql_result(connection_pool *connPool);
     int timer_flag;
     int improv;
 
@@ -110,7 +111,7 @@ private:
 public:
     static int m_epollfd;
     static int m_user_count;
-    MYSQL *mysql;
+    //MYSQL *mysql;
     int m_state;  //读为0, 写为1
 
 private:

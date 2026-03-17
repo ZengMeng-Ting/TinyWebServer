@@ -6,7 +6,7 @@
 #include <exception>
 #include <pthread.h>
 #include "../lock/locker.h"
-#include "../CGImysql/sql_connection_pool.h"
+//#include "../CGImysql/sql_connection_pool.h"
 
 template <typename T>
 class threadpool
@@ -120,7 +120,7 @@ void threadpool<T>::run()
                 if (request->read_once())
                 {
                     request->improv = 1;
-                    connectionRAII mysqlcon(&request->mysql, m_connPool);
+                   // connectionRAII mysqlcon(&request->mysql, m_connPool);
                     request->process();
                 }
                 else

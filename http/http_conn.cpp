@@ -1,6 +1,6 @@
 #include "http_conn.h"
-
-#include <mysql/mysql.h>
+#include <sqlite3.h>
+//#include <mysql/mysql.h>
 #include <fstream>
 
 //定义http响应的一些状态信息
@@ -19,8 +19,59 @@ map<string, string> users;
 
 void http_conn::initmysql_result(connection_pool *connPool)
 {
+    sqlite3 *db;
+    char *errmsg = nullptr;
+
+    // 打开数据库（没有就会创建）
+    if (sqlite3_open("user.db", &db))
+    {
+        LOG_ERROR("Can't open database: %s\n", sqlite3_errmsg(db));
+        return;
+    }
+
+    // 创建表（如果不存在）
+    const char *create_sql =
+        "CREATE TABLE IF NOT EXISTS user ("
+        "username TEXT PRIMARY KEY, "
+        "passwd TEXT);";
+
+    if (sqlite3_exec(db, create_sql, 0, 0, &errmsg) != SQLITE_OK)
+    {
+        LOG_ERROR("Create table error: %s\n", errmsg);
+        sqlite3_free(errmsg);
+    }
+
+    // 查询用户
+    const char *select_sql = "SELECT username, passwd FROM user;";
+    
+    sqlite3_stmt *stmt;
+
+    if (sqlite3_prepare_v2(db, select_sql, -1, &stmt, NULL) != SQLITE_OK)
+    {
+        LOG_ERROR("SELECT prepare error\n");
+        sqlite3_close(db);
+        return;
+    }
+
+    // 清空原有缓存
+    users.clear();
+
+    while (sqlite3_step(stmt) == SQLITE_ROW)
+    {
+        string username = (const char *)sqlite3_column_text(stmt, 0);
+        string password = (const char *)sqlite3_column_text(stmt, 1);
+        users[username] = password;
+    }
+
+    sqlite3_finalize(stmt);
+    sqlite3_close(db);
+}
+
+/*
+void http_conn::initmysql_result(connection_pool *connPool)
+{
     //先从连接池中取一个连接
-    MYSQL *mysql = NULL;
+    //MYSQL *mysql = NULL;
     connectionRAII mysqlcon(&mysql, connPool);
 
     //在user表中检索username，passwd数据，浏览器端输入
@@ -46,6 +97,7 @@ void http_conn::initmysql_result(connection_pool *connPool)
         users[temp1] = temp2;
     }
 }
+*/
 
 //对文件描述符设置非阻塞
 int setnonblocking(int fd)
@@ -433,7 +485,45 @@ http_conn::HTTP_CODE http_conn::do_request()
             if (users.find(name) == users.end())
             {
                 m_lock.lock();
-                int res = mysql_query(mysql, sql_insert);
+                //int res = mysql_query(mysql, sql_insert);
+
+                sqlite3 *db;
+                char *errmsg = nullptr;
+
+                sqlite3_open("user.db", &db);
+
+                string sql_insert = "INSERT INTO user(username, passwd) VALUES('";
+                sql_insert += name;
+                sql_insert += "', '";
+                sql_insert += password;
+                sql_insert += "')";
+
+                if (users.find(name) == users.end())
+                {
+                    m_lock.lock();
+
+                    int res = sqlite3_exec(db, sql_insert.c_str(), 0, 0, &errmsg);
+
+                    if (res == SQLITE_OK)
+                    {
+                        users.insert(pair<string, string>(name, password));
+                        strcpy(m_url, "/log.html");
+                    }
+                    else
+                    {
+                        strcpy(m_url, "/registerError.html");
+                        sqlite3_free(errmsg);
+                    }
+
+                    m_lock.unlock();
+                }
+                else
+                {
+                    strcpy(m_url, "/registerError.html");
+                }
+
+                sqlite3_close(db);
+                
                 users.insert(pair<string, string>(name, password));
                 m_lock.unlock();
 
